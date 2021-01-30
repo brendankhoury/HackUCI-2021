@@ -1,24 +1,58 @@
 const living = require("./data/livingSituation.js");
 const occupation = require("./data/workerclass.js");
-const state_phases = require("./data/state_phases.js")
+const state_phases = require("./data/state_phases.js");
 
 const express = require("express");
 const fetch = require("node-fetch");
 const bodyParser = require("body-parser");
-
+const parse = require("csv-parse/lib/sync");
+const e = require("express");
 const app = express();
 
 const port = process.env.PORT || 5000;
 
-var pfizer_data = {};
-var moderna_data = {};
-
+// This looks like:
+// key: date
+// Value: {}
+//  ----- key: state
+/// ----- value: everything else.
 var cumulative_vaccine_data = {};
+
+preprocess_vaccine_data = (data) => {
+    data.forEach((item) => {
+        let attemptedDate = new Date(item.date);
+        console.log(attemptedDate);
+        if (cumulative_vaccine_data[item.date] === undefined) {
+            cumulative_vaccine_data[item.date] = {};
+        }
+        const itemDate = item.date;
+        const itemLocation = item.location;
+        delete item.date;
+        delete item.location;
+        cumulative_vaccine_data[itemDate][itemLocation] = item;
+
+    });
+    console.log("Data done processing");
+};
+
+fetch(
+    "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/vaccinations/us_state_vaccinations.csv"
+)
+    .then((res) => res.text())
+    .then((text) => {
+        preprocess_vaccine_data(
+            parse(text, {
+                columns: true,
+                skip_empty_lines: true,
+            })
+        );
+    });
+
 getCurrentWeek = () => {
     var d = new Date();
     // set the date to the date of the next monday
     d.setDate(d.getDate() + ((1 + 7 - d.getDay()) % 7));
-
+    d.get;
     return (
         (d.getMonth() + 1 < 10 ? "0" + (d.getMonth() + 1) : d.getMonth()) +
         "_" +
@@ -46,45 +80,67 @@ getPreviousWeek = () => {
 vaccineDataPreprocessing = (data, dataType) => {
     data.forEach((jurisdictionData) => {
         // console.log(Object.keys(jurisdictionData))
-        var jurisdiction =  ""
+        var jurisdiction = "";
         // Replace was being annoying
-        for (var i = 0; i < jurisdictionData.jurisdiction.length; i++){ 
-            if (jurisdictionData.jurisdiction.charAt(i) !== "*" && jurisdictionData.jurisdiction.charAt(i) !== "~" ) {
-                jurisdiction += jurisdictionData.jurisdiction.charAt(i)
+        for (var i = 0; i < jurisdictionData.jurisdiction.length; i++) {
+            if (
+                jurisdictionData.jurisdiction.charAt(i) !== "*" &&
+                jurisdictionData.jurisdiction.charAt(i) !== "~"
+            ) {
+                jurisdiction += jurisdictionData.jurisdiction.charAt(i);
             }
         }
-        jurisdiction = jurisdiction.trim().toLocaleLowerCase()
+        jurisdiction = jurisdiction.trim().toLocaleLowerCase();
 
         if (cumulative_vaccine_data[jurisdiction] === undefined) {
             currentWeekIndex =
                 "doses_allocated_for_week_of_" + getCurrentWeek();
-            previousWeekIndex =
-                "doses_allocated_week_of_" + getPreviousWeek();
+            previousWeekIndex = "doses_allocated_week_of_" + getPreviousWeek();
             // console.log(jurisdictionData[previousWeekIndex])
             // console.log(jurisdictionData[currentWeekIndex], jurisdictionData[currentWeekIndex] !== undefined, previousWeekIndex,jurisdictionData[previousWeekIndex] !== undefined)
-            if (jurisdictionData[currentWeekIndex] !== undefined && jurisdictionData[previousWeekIndex] !== undefined && jurisdictionData["total_" + dataType + "_allocation_first_dose_shipments"] !== undefined) {
+            if (
+                jurisdictionData[currentWeekIndex] !== undefined &&
+                jurisdictionData[previousWeekIndex] !== undefined &&
+                jurisdictionData[
+                    "total_" + dataType + "_allocation_first_dose_shipments"
+                ] !== undefined
+            ) {
                 cumulative_vaccine_data[jurisdiction] = {
                     twoWeekAdmin:
                         Number(
-                            jurisdictionData[currentWeekIndex].replace(/\,/g, "")
+                            jurisdictionData[currentWeekIndex].replace(
+                                /\,/g,
+                                ""
+                            )
                         ) +
                         Number(
-                            jurisdictionData[previousWeekIndex].replace(/\,/g, "")
+                            jurisdictionData[previousWeekIndex].replace(
+                                /\,/g,
+                                ""
+                            )
                         ),
-                    currentTotal:
-                            Number(jurisdictionData["total_" + dataType + "_allocation_first_dose_shipments"].replace(/\,/g, ""))
+                    currentTotal: Number(
+                        jurisdictionData[
+                            "total_" +
+                                dataType +
+                                "_allocation_first_dose_shipments"
+                        ].replace(/\,/g, "")
+                    ),
                 };
                 // console.log(jurisdiction, cumulative_vaccine_data[jurisdiction])
             }
         } else {
             currentWeekIndex =
                 "doses_allocated_for_week_of_" + getCurrentWeek();
-            previousWeekIndex =
-                "doses_allocated_week_of_" + getPreviousWeek();
+            previousWeekIndex = "doses_allocated_week_of_" + getPreviousWeek();
             cumulative_vaccine_data[jurisdiction].twoWeekAdmin +=
                 Number(jurisdictionData[currentWeekIndex].replace(/\,/g, "")) +
                 Number(jurisdictionData[previousWeekIndex].replace(/\,/g, ""));
-            cumulative_vaccine_data[jurisdiction].currentTotal += Number(jurisdictionData["total_" + dataType + "_allocation_first_dose_shipments"].replace(/\,/g, ""))
+            cumulative_vaccine_data[jurisdiction].currentTotal += Number(
+                jurisdictionData[
+                    "total_" + dataType + "_allocation_first_dose_shipments"
+                ].replace(/\,/g, "")
+            );
             // console.log(jurisdictionData["total_" + dataType + "_allocation_first_dose_shipments"])
             // console.log(
             //     Number(jurisdictionData[currentWeekIndex].replace(",", ""))
@@ -99,13 +155,13 @@ fetch("https://data.cdc.gov/resource/saz5-9hgg.json")
     .then((res) => res.json())
     .then((json) => {
         pfizer_data = json;
-        vaccineDataPreprocessing(pfizer_data,'pfizer');
+        vaccineDataPreprocessing(pfizer_data, "pfizer");
     });
 fetch("https://data.cdc.gov/resource/b7pe-5nws.json")
     .then((res) => res.json())
     .then((json) => {
         moderna_data = json;
-        vaccineDataPreprocessing(moderna_data, 'moderna');
+        vaccineDataPreprocessing(moderna_data, "moderna");
     });
 
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -143,40 +199,58 @@ app.get("/", (req, res) => {
     let age = req.body.age;
     let work = req.body.work;
     let livingSituation = req.body.livingSituationl;
-    let state = req.body.state.toLocaleLowerCase().trim()
+    let state = req.body.state.toLocaleLowerCase().trim();
 
     const phase = phaseIdentifier(age, work, livingSituation);
 
     // Calculate # of people ahead to get the vaccine
     // Joey
     var pplAhead = 0;
-    
-    console.log(Object.keys(state_phases))
+
+    console.log(Object.keys(state_phases));
 
     if (phase === "1a") {
-        pplAhead = 0
+        pplAhead = 0;
     } else if (phase === "1b") {
-        pplAhead = state_phases.state_phases[state]["1a"]
+        pplAhead = state_phases.state_phases[state]["1a"];
     } else if (phase === "2") {
-        pplAhead = state_phases.state_phases[state]["1a"] +  state_phases.state_phases[state]["1b"]
+        pplAhead =
+            state_phases.state_phases[state]["1a"] +
+            state_phases.state_phases[state]["1b"];
     } else if (phase === "3") {
-        pplAhead = state_phases.state_phases[state]["1a"] +  state_phases.state_phases[state]["1b"] + state_phases.state_phases[state]["2"]
+        pplAhead =
+            state_phases.state_phases[state]["1a"] +
+            state_phases.state_phases[state]["1b"] +
+            state_phases.state_phases[state]["2"];
     } else if (phase === "4") {
-        pplAhead = state_phases.state_phases[state]["1a"] +  state_phases.state_phases[state]["1b"] + state_phases.state_phases[state]["2"] + state_phases.state_phases[state]["3"]
+        pplAhead =
+            state_phases.state_phases[state]["1a"] +
+            state_phases.state_phases[state]["1b"] +
+            state_phases.state_phases[state]["2"] +
+            state_phases.state_phases[state]["3"];
     }
     // Calculate the # of vaccines administered per day
-    console.log(cumulative_vaccine_data[state], state_phases.state_phases[state])
-    const dailyVaccines = cumulative_vaccine_data[state].twoWeekAdmin / 14
-    
+    console.log(
+        cumulative_vaccine_data[state],
+        state_phases.state_phases[state]
+    );
+    const dailyVaccines = 6; //cumulative_vaccine_data[(new Date()).]
+
     // From there identify the number of days to get ahead.
-    const daysUntilPhaseAvailibility = (pplAhead - cumulative_vaccine_data[state].currentTotal) / dailyVaccines;
-    let message = "We estimate you are in phase " + phase + "\n";  
+    const daysUntilPhaseAvailibility =
+        (pplAhead - cumulative_vaccine_data[state].currentTotal) /
+        dailyVaccines;
+    let message = "We estimate you are in phase " + phase + "\n";
     if (daysUntilPhaseAvailibility <= 0) {
-        message = "Currently, your state is probably distributing vaccines to people in your phase, contact your local government for more information."
+        message =
+            "Currently, your state is probably distributing vaccines to people in your phase, contact your local government for more information.";
     } else {
-        message = "We estimate that it will take " + daysUntilPhaseAvailibility + " more days until your phase begins getting the vaccine. It will likely take longer to reach everyone in your phase."
+        message =
+            "We estimate that it will take " +
+            daysUntilPhaseAvailibility +
+            " more days until your phase begins getting the vaccine. It will likely take longer to reach everyone in your phase.";
     }
-    
+
     console.log("phase", phase);
     res.json({
         phase: phase,
