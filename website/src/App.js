@@ -87,7 +87,7 @@ function App() {
     let [livingSituation, setLivingSituation] = useState();
     let [age, setAge] = useState();
     let [response, setResponse] = useState("");
-    // setResponse("");
+
     var submitForm = async () => {
         console.log(location, userOccupation, livingSituation, age);
         console.log()
