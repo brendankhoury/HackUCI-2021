@@ -164,7 +164,7 @@ app.get("/", (req, res) => {
 
     res.json({
         phase: phase,
-        getCurrentWeek: getCurrentWeek(),
+        // getCurrentWeek: getCurrentWeek(),
         message: message,
     });
 });
