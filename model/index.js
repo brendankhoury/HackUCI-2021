@@ -8,6 +8,7 @@ const bodyParser = require("body-parser");
 const parse = require("csv-parse/lib/sync");
 const e = require("express");
 const app = express();
+var cors = require('cors');
 
 const port = process.env.PORT || 8080;
 
@@ -47,6 +48,7 @@ fetch(
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
+app.use(cors());
 
 phaseIdentifier = (age, work, livingSituation, numConditions) => {
     curPhase = 10;
@@ -86,87 +88,94 @@ phaseIdentifier = (age, work, livingSituation, numConditions) => {
 };
 
 app.get("/", (req, res) => {
-    let age = req.body.age;
-    let work = req.body.work;
-    let livingSituation = req.body.livingSituationl;
-    let numConditions = req.body.numConditions;
-    let state = req.body.state.toLocaleLowerCase().trim();
+    try { 
 
-    const phase = phaseIdentifier(age, work, livingSituation, numConditions);
-
-    // Calculate # of people ahead to get the vaccine
-    // Joey
-    var pplAhead = 0;
-
-    if (phase === "1a") {
-        pplAhead = 0;
-    } else if (phase === "1b") {
-        pplAhead = state_phases.state_phases[state]["1a"];
-    } else if (phase === "2") {
-        pplAhead =
-            state_phases.state_phases[state]["1a"] +
-            state_phases.state_phases[state]["1b"];
-    } else if (phase === "3") {
-        pplAhead =
-            state_phases.state_phases[state]["1a"] +
-            state_phases.state_phases[state]["1b"] +
-            state_phases.state_phases[state]["2"];
-    } else if (phase === "4") {
-        pplAhead =
-            state_phases.state_phases[state]["1a"] +
-            state_phases.state_phases[state]["1b"] +
-            state_phases.state_phases[state]["2"] +
-            state_phases.state_phases[state]["3"];
-    }
-    // Calculate the # of vaccines administered per day
-    // console.log(
-    //     cumulative_vaccine_data[state],
-    //     state_phases.state_phases[state]
-    // );
-    const today = new Date();
-    // console.log(today.toISOString().substr(0,10))
-    let dailyVaccines = 0;
-    var numDaysAveraged = 0;
-    // cumulative_vaccine_data[today.toISOString().substr(0,10)][state]["daily_vaccinations"]
-
-    for (var i = 0; i < 4; i++) {
-        if (
-            cumulative_vaccine_data[today.toISOString().substr(0, 10)] !==
-            undefined
-        ) {
-            dailyVaccines += Number(
-                cumulative_vaccine_data[today.toISOString().substr(0, 10)][
-                    state
-                ]["daily_vaccinations"]
-            );
-            numDaysAveraged += 1;
+        let age = req.body.age;
+        let work = req.body.work;
+        let livingSituation = req.body.livingSituationl;
+        let numConditions = req.body.numConditions;
+        let state = req.body.state.toLocaleLowerCase().trim();
+    
+        const phase = phaseIdentifier(age, work, livingSituation, numConditions);
+    
+        // Calculate # of people ahead to get the vaccine
+        // Joey
+        var pplAhead = 0;
+    
+        if (phase === "1a") {
+            pplAhead = 0;
+        } else if (phase === "1b") {
+            pplAhead = state_phases.state_phases[state]["1a"];
+        } else if (phase === "2") {
+            pplAhead =
+                state_phases.state_phases[state]["1a"] +
+                state_phases.state_phases[state]["1b"];
+        } else if (phase === "3") {
+            pplAhead =
+                state_phases.state_phases[state]["1a"] +
+                state_phases.state_phases[state]["1b"] +
+                state_phases.state_phases[state]["2"];
+        } else if (phase === "4") {
+            pplAhead =
+                state_phases.state_phases[state]["1a"] +
+                state_phases.state_phases[state]["1b"] +
+                state_phases.state_phases[state]["2"] +
+                state_phases.state_phases[state]["3"];
         }
-        today.setDate(today.getDate() - 1);
+        // Calculate the # of vaccines administered per day
+        // console.log(
+        //     cumulative_vaccine_data[state],
+        //     state_phases.state_phases[state]
+        // );
+        const today = new Date();
+        // console.log(today.toISOString().substr(0,10))
+        let dailyVaccines = 0;
+        var numDaysAveraged = 0;
+        // cumulative_vaccine_data[today.toISOString().substr(0,10)][state]["daily_vaccinations"]
+    
+        for (var i = 0; i < 4; i++) {
+            if (
+                cumulative_vaccine_data[today.toISOString().substr(0, 10)] !==
+                undefined
+            ) {
+                dailyVaccines += Number(
+                    cumulative_vaccine_data[today.toISOString().substr(0, 10)][
+                        state
+                    ]["daily_vaccinations"]
+                );
+                numDaysAveraged += 1;
+            }
+            today.setDate(today.getDate() - 1);
+        }
+        dailyVaccines = dailyVaccines / numDaysAveraged;
+    
+        // From there identify the number of days to get ahead.
+        const daysUntilPhaseAvailibility =
+            (pplAhead -
+                cumulative_vaccine_data[today.toISOString().substr(0, 10)][state]
+                    .people_vaccinated) /
+            dailyVaccines;
+        let message = "We estimate you are in phase " + phase + "\n";
+        if (daysUntilPhaseAvailibility <= 0) {
+            message =
+                "Currently, your state is probably distributing vaccines to people in your phase, contact your local government for more information.";
+        } else {
+            message =
+                "We estimate that it will take " +
+                Math.trunc(daysUntilPhaseAvailibility) +
+                " more days until your phase begins getting the vaccine. It will likely take longer to reach everyone in your phase. This assumes that vaccine distribution maintains its current rate, it may increase in the future.";
+        }
+    
+        res.json({
+            phase: phase,
+            // getCurrentWeek: getCurrentWeek(),
+            message: message,
+        });
+    } catch( err) {
+        res.json({
+            error:"There was an error" + err.message
+        })
     }
-    dailyVaccines = dailyVaccines / numDaysAveraged;
-
-    // From there identify the number of days to get ahead.
-    const daysUntilPhaseAvailibility =
-        (pplAhead -
-            cumulative_vaccine_data[today.toISOString().substr(0, 10)][state]
-                .people_vaccinated) /
-        dailyVaccines;
-    let message = "We estimate you are in phase " + phase + "\n";
-    if (daysUntilPhaseAvailibility <= 0) {
-        message =
-            "Currently, your state is probably distributing vaccines to people in your phase, contact your local government for more information.";
-    } else {
-        message =
-            "We estimate that it will take " +
-            Math.trunc(daysUntilPhaseAvailibility) +
-            " more days until your phase begins getting the vaccine. It will likely take longer to reach everyone in your phase. This assumes that vaccine distribution maintains its current rate, it may increase in the future.";
-    }
-
-    res.json({
-        phase: phase,
-        // getCurrentWeek: getCurrentWeek(),
-        message: message,
-    });
 });
 
 app.listen(port, () => {
