@@ -1,1 +1,2 @@
-# HackUCI-2021
+# VaccineEstimator
+Estimates the nearest date a user can receive their vaccine
